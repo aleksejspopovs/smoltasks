@@ -22,9 +22,9 @@ async fn sign_up_handler(db: Db, params: SignUpParams) -> Result<impl Reply, Rej
 }
 
 fn sign_up(db: Db) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::path("sign_up")
+    warp::post()
+        .and(warp::path("sign_up"))
         .and(warp::path::end())
-        .and(warp::post())
         .and(with_db(db))
         .and(warp::body::json())
         .and_then(sign_up_handler)
@@ -45,9 +45,9 @@ async fn login_handler(db: Db, params: AuthParams) -> Result<impl Reply, Rejecti
 }
 
 fn login(db: Db) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::path("login")
+    warp::post()
+        .and(warp::path("login"))
         .and(warp::path::end())
-        .and(warp::post())
         .and(with_db(db))
         .and(warp::body::json())
         .and_then(login_handler)
@@ -58,9 +58,9 @@ async fn whoami_handler(user: models::User) -> Result<impl Reply, Infallible> {
 }
 
 fn whoami(db: Db) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::path("whoami")
+    warp::get()
+        .and(warp::path("whoami"))
         .and(warp::path::end())
-        .and(warp::get())
         .and(with_auth(db))
         .and_then(whoami_handler)
 }

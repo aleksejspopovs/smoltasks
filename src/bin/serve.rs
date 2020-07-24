@@ -1,7 +1,7 @@
 use warp::Filter;
 
 use dotenv::dotenv;
-use sqlx::sqlite::SqlitePool;
+use sqlx::postgres::PgPool;
 use std::env;
 
 use smoltasks::api::routes as api_routes;
@@ -12,7 +12,7 @@ async fn main() {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let pool = SqlitePool::builder()
+    let pool = PgPool::builder()
         .max_size(5)
         .build(&database_url)
         .await

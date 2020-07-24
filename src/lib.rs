@@ -1,6 +1,8 @@
+use chrono::offset::Utc;
+
 use scrypt::{scrypt_check, scrypt_simple, ScryptParams};
 
-use sqlx::sqlite::SqlitePool;
+use sqlx::postgres::PgPool;
 
 use getrandom;
 use hex;
@@ -10,9 +12,8 @@ use std::error::Error;
 
 pub mod api;
 pub mod models;
-mod utils;
 
-pub type Db = SqlitePool;
+pub type Db = PgPool;
 
 fn hash_password(password: &str) -> String {
     let params = ScryptParams::recommended();
@@ -50,7 +51,7 @@ async fn create_user(
     let password_hash = hash_password(password);
 
     let result = sqlx::query!(
-        "INSERT INTO users VALUES (null, ?, ?)",
+        "INSERT INTO users (username, password_hash) VALUES ($1, $2)",
         username,
         password_hash
     )
@@ -60,9 +61,9 @@ async fn create_user(
     match result {
         Ok(_) => Ok(CreateUserResult::Ok),
         Err(sqlx::Error::Database(err)) => {
-            // SQLITE_CONSTRAINT_UNIQUE
-            // from https://sqlite.org/rescode.html#constraint_unique
-            if err.code() == Some("2067") {
+            // unique_violation
+            // from https://www.postgresql.org/docs/12/errcodes-appendix.html
+            if err.code() == Some("23505") {
                 Ok(CreateUserResult::UsernameExists)
             } else {
                 Err(Box::new(sqlx::Error::Database(err)))
@@ -84,7 +85,7 @@ async fn auth_user(
 ) -> Result<AuthUserResult, Box<dyn Error>> {
     let user = sqlx::query_as!(
         models::User,
-        "SELECT * FROM users WHERE username = ?",
+        "SELECT * FROM users WHERE username = $1",
         username
     )
     .fetch_optional(&db)
@@ -100,9 +101,10 @@ async fn auth_user(
         Ok(()) => {
             let (token, token_hash) = generate_and_hash_auth_token();
             sqlx::query!(
-                "INSERT INTO auth VALUES (null, ?, ?, datetime('now'))",
+                "INSERT INTO auth (user_id, token_hash, created) VALUES ($1, $2, $3)",
                 user.id,
-                token_hash
+                token_hash,
+                Utc::now()
             )
             .execute(&db)
             .await?;
@@ -119,7 +121,7 @@ async fn verify_token(db: Db, token: &str) -> Result<Option<models::User>, Box<d
 
     Ok(sqlx::query_as!(
         models::User,
-        "SELECT users.* FROM auth JOIN users ON auth.user_id = users.id WHERE token_hash = ?",
+        "SELECT users.* FROM auth JOIN users ON auth.user_id = users.id WHERE token_hash = $1",
         token_hash
     )
     .fetch_optional(&db)
@@ -132,7 +134,7 @@ async fn verify_todo_id(
     todo_id: models::TodoId,
 ) -> Result<bool, Box<dyn Error>> {
     Ok(
-        sqlx::query!("SELECT user_id FROM todos WHERE id = ?", todo_id)
+        sqlx::query!("SELECT user_id FROM todos WHERE id = $1", todo_id)
             .fetch_optional(&db)
             .await?
             .map_or(false, |x| x.user_id == user.id),
@@ -145,7 +147,7 @@ async fn get_active_todos(
 ) -> Result<Vec<models::Todo>, Box<dyn Error>> {
     Ok(sqlx::query_as!(
         models::Todo,
-        "SELECT * FROM todos WHERE user_id = ? AND done = 0",
+        "SELECT * FROM todos WHERE user_id = $1 AND NOT done",
         user.id
     )
     .fetch_all(&db)
@@ -155,25 +157,58 @@ async fn get_active_todos(
 async fn create_todo(
     db: Db,
     user: &models::User,
-    title: &str,
-    notes: &str,
-    not_before: Option<models::Date>,
-    due: Option<models::Date>,
+    todo: &models::TodoEditable,
 ) -> Result<models::TodoId, Box<dyn Error>> {
     // grab a connection explicitly so that we can call
     // last_insert_row_id on it after inserting.
     let mut conn = db.acquire().await?;
 
-    sqlx::query!(
-        "INSERT INTO todos VALUES (null, ?, ?, ?, ?, ?, 0)",
+    Ok(sqlx::query!(
+        "INSERT INTO todos (user_id, title, notes, not_before, due, done)
+        VALUES ($1, $2, $3, $4, $5, false)
+        RETURNING id",
         user.id,
-        title,
-        notes,
-        not_before,
-        due
+        todo.title,
+        todo.notes,
+        todo.not_before,
+        todo.due,
     )
-    .execute(&mut conn)
+    .fetch_one(&mut conn)
+    .await?
+    .id)
+}
+
+async fn mark_todo_done(
+    db: Db,
+    todo_id: models::TodoId,
+    done: bool,
+) -> Result<(), Box<dyn Error>> {
+    sqlx::query!(
+        "UPDATE todos SET done = $1 WHERE id = $2",
+        done,
+        todo_id,
+    )
+    .execute(&db)
     .await?;
 
-    Ok(utils::last_insert_rowid(&mut conn).await? as models::TodoId)
+    Ok(())
+}
+
+async fn update_todo(
+    db: Db,
+    todo_id: models::TodoId,
+    todo: &models::TodoEditable,
+) -> Result<(), Box<dyn Error>> {
+    sqlx::query!(
+        "UPDATE todos SET title = $1, notes = $2, not_before = $3, due = $4 WHERE id = $5",
+        todo.title,
+        todo.notes,
+        todo.not_before,
+        todo.due,
+        todo_id,
+    )
+    .execute(&db)
+    .await?;
+
+    Ok(())
 }
