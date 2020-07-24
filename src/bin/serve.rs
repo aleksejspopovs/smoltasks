@@ -1,8 +1,7 @@
 use warp::Filter;
 
-use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool};
 use dotenv::dotenv;
+use sqlx::sqlite::SqlitePool;
 use std::env;
 
 use smoltasks::api::routes as api_routes;
@@ -11,21 +10,17 @@ use smoltasks::api::routes as api_routes;
 async fn main() {
     dotenv().ok();
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let manager = ConnectionManager::new(database_url);
-    let pool = Pool::builder()
-        .max_size(15)
-        .build(manager)
-        .unwrap();
+    let pool = SqlitePool::builder()
+        .max_size(5)
+        .build(&database_url)
+        .await
+        .expect("can build db pool");
 
-    let api = warp::path("api")
-        .and(api_routes(pool));
+    let api = warp::path("api").and(api_routes(pool));
 
     let routes = api;
 
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 3030))
-        .await;
+    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 }

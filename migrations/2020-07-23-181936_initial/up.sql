@@ -31,4 +31,4 @@ CREATE TABLE todos (
 		ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE INDEX todos_by_user_id ON todos (user_id);
-CREATE INDEX todos_active_by_user_id ON todos (user_id) WHERE done > 0;
+CREATE INDEX todos_active_by_user_id ON todos (user_id) WHERE done = 0;
