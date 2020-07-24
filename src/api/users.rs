@@ -17,6 +17,8 @@ async fn sign_up_handler(db: Db, params: SignUpParams) -> Result<impl Reply, Rej
     match create_user(db, &params.username, &params.password).await {
         Ok(CreateUserResult::Ok) => Ok(warp::reply::json(&true)),
         Ok(CreateUserResult::UsernameExists) => Err(api_error("username already exists")),
+        Ok(CreateUserResult::UsernameEmpty) => Err(api_error("username is empty")),
+        Ok(CreateUserResult::UsernameTooLong) => Err(api_error("username is too long")),
         Err(err) => Err(server_error(err)),
     }
 }

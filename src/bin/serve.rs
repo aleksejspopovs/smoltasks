@@ -1,4 +1,4 @@
-use warp::Filter;
+use warp::{http::Uri, Filter};
 
 use dotenv::dotenv;
 use sqlx::postgres::PgPool;
@@ -19,8 +19,14 @@ async fn main() {
         .expect("can build db pool");
 
     let api = warp::path("api").and(api_routes(pool));
+    let client = warp::path("client")
+        .and(warp::fs::dir("web_client"));
+    let index = warp::path::end()
+        .map(|| {
+            warp::redirect::redirect(Uri::from_static("/client/"))
+        });
 
-    let routes = api;
+    let routes = index.or(client.or(api));
 
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 }

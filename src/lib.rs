@@ -41,6 +41,8 @@ fn generate_and_hash_auth_token() -> (String, String) {
 enum CreateUserResult {
     Ok,
     UsernameExists,
+    UsernameEmpty,
+    UsernameTooLong,
 }
 
 async fn create_user(
@@ -48,6 +50,12 @@ async fn create_user(
     username: &str,
     password: &str,
 ) -> Result<CreateUserResult, Box<dyn Error>> {
+    if username.len() == 0 {
+        return Ok(CreateUserResult::UsernameEmpty)
+    }
+    if username.len() > 20 {
+        return Ok(CreateUserResult::UsernameTooLong)
+    }
     let password_hash = hash_password(password);
 
     let result = sqlx::query!(
