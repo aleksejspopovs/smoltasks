@@ -10,6 +10,8 @@
 
 html {
 	width: var(--pagewidth);
+	min-height: 100%;
+	border-right: 1px dashed black;
 }
 
 body {
@@ -17,34 +19,93 @@ body {
 	font-size: 12px;
 }
 
-#section-login input {
-	width: 100%;
-	box-sizing: border-box;
-}
-
 section {
 	display: none;
 }
 
-li.active {
-	color: red;
-}
-
-#t-loading {
+.overlay {
 	position: absolute;
 	top: 0px;
 	left: 0px;
 	width: var(--pagewidth);
 	height: 100%;
-	background: rgba(137, 207, 240, 25%);
 }
 
-#t-loading div {
+.overlay-inner {
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	text-align: center;
 	transform: translate(-50%, -50%);
+}
+
+/* login section */
+
+#section-login input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* todo section */
+ol {
+	list-style-type: circle;
+	padding-left: 20px;
+	margin-top: 4px;
+}
+
+li .only-active {
+	display: none;
+}
+
+li.overdue .title::before {
+	content: '!! ';
+	color: red;
+	font-weight: bold;
+}
+
+li.due-today .title::before {
+	content: '! ';
+	color: red;
+	font-weight: bold;
+}
+
+li.due-tomorrow .title::before {
+	content: '~ ';
+	color: orange;
+	font-weight: bold;
+}
+
+li.active {
+	margin-top: 4px;
+	margin-bottom: 4px;
+}
+
+li.active .only-active {
+	display: block;
+}
+
+li .notes {
+	font-style: italic;
+}
+
+li .dates {
+	font-size: 10px;
+}
+
+li.active {
+	/*color: red;*/
+	list-style-type: disc;
+}
+
+li.delete-pending {
+	text-decoration: solid black line-through;
+}
+
+#t-loading {
+	background: rgba(137, 207, 240, 25%);
+}
+
+#t-loading .overlay-inner {
+	text-align: center;
 	animation-duration: 3s;
 	animation-name: rotate;
 	animation-iteration-count: infinite;
@@ -61,6 +122,23 @@ li.active {
     transform: translate(-50%, -50%) rotate(360deg);
   }
 }
+
+/* editor section */
+
+#section-editor {
+	background: rgba(255, 255, 255, 75%);
+}
+
+#section-editor .overlay-inner {
+	background: #fff;
+	border: 1px solid #000;
+}
+
+#section-editor input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
 		</style>
 	    <script type='module' src='/client/js/app.js'></script>
 	</head>
@@ -75,7 +153,14 @@ li.active {
 			<div id='l-status'></div>
 		</section>
 		<section id='section-todos'>
-			<div id='t-loading'><div>hang in there, buddy</div></div>
+			<div id='t-loading' class='overlay'><div class='overlay-inner'>hang in there, buddy</div></div>
+			<template id='t-todo-template'>
+				<li>
+					<div class='title'></div>
+					<div class='only-active dates'></div>
+					<div class='only-active notes'></div>
+				</li>
+			</template>
 			<div id='t-now'>
 				<div class='head'>do now</div>
 				<ol></ol>
@@ -87,6 +172,21 @@ li.active {
 			<div id='t-later'>
 				<div class='head'>do later</div>
 				<ol></ol>
+			</div>
+		</section>
+		<section id='section-editor' class='overlay'>
+			<div class='overlay-inner'>
+				<form>
+					<input required id='e-title' placeholder='title'>
+					<textarea id='e-notes' rows='3' placeholder='notes'></textarea>
+					<input id='e-not-before'>
+					nb <span id='e-not-before-display'></span>
+					<input id='e-due'>
+					due <span id='e-due-display'></span>
+					<!-- firefox does not let you submit a form with Enter
+					     if it does not have any buttons. -->
+					<button style='display: none'>i'm a hack.</button>
+				</form>
 			</div>
 		</section>
 	</body>

@@ -1,5 +1,6 @@
 import {partition} from './utils.js'
-import {today, daysToMs} from './date.js'
+import {today, daysToMs, printDate, parseShorthand, parseDate} from './date.js'
+import {askForTodo, EditorFields} from './editor.js'
 
 const SOON_IN_DAYS = 7
 
@@ -24,25 +25,36 @@ class Todos {
     this.api = api
     this.root = root
     this.selected = null
+    this.deletePending = false
     this.todos = [[], [], []]
     this.blocked = false
     this.reload()
   }
 
-  block() {
-    this.root.querySelector('#t-loading').style.display = 'block'
+  blockFor(f, showSpinner=false) {
+    if (showSpinner) {
+      this.root.querySelector('#t-loading').style.display = 'block'
+    }
     this.blocked = true
-  }
 
-  unblock() {
-    this.root.querySelector('#t-loading').style.display = 'none'
-    this.blocked = false
+    return f().finally(() => {
+      if (showSpinner) {
+        this.root.querySelector('#t-loading').style.display = 'none'
+      }
+      this.blocked = false
+    })
   }
 
   setSelection(value) {
     console.assert(this.validSelection(value))
     this.selected = value
     this.render()
+  }
+
+  selectedId() {
+    return (this.selected !== null
+      ? this.todos[this.selected[0]][this.selected[1]].id
+      : null)
   }
 
   validSelection(value) {
@@ -110,15 +122,57 @@ class Todos {
     this.setSelection(null)
   }
 
+  deleteSelected() {
+    console.assert(this.selected !== null)
+    // TODO: error handling
+    this.blockFor(() => this.api.markDone(this.selectedId()), true)
+    .then(_ => this.reload())
+  }
+
+  newTodo(editorRoot) {
+    this.blockFor(() => askForTodo(editorRoot))
+    .then(todo => {
+      this.blockFor(() => this.api.createTodo(todo), true)
+      .then(_ => this.reload())
+    })
+  }
+
+  editSelected(editorRoot, focus=EditorFields.Title) {
+    console.assert(this.selected !== null)
+    let template = this.todos[this.selected[0]][this.selected[1]]
+    this.blockFor(() => askForTodo(editorRoot, template, focus))
+    .then(todo => {
+      this.blockFor(() => this.api.editTodo(template.id, todo), true)
+      .then(_ => this.reload())
+    })
+  }
+
+  quickPostponeSelected() {
+    console.assert(this.selected !== null)
+    if (this.selected[0] !== 0) {
+      // only TODOs assigned for today can be postponed
+      return
+    }
+    let todo = this.todos[this.selected[0]][this.selected[1]]
+    this.blockFor(() => {
+      return this.api.editTodo(todo.id, {
+        title: todo.title,
+        notes: todo.notes,
+        not_before: printDate(parseShorthand('1')), // tomorrow
+        due: (todo.due === null) ? null : printDate(todo.due),
+      })
+    }).then(_ => this.reload())
+  }
+
   async reload() {
-    this.block()
-    let raw = await this.api.activeTodos()
+    // TODO: error handling
+    let raw = await this.blockFor(() => this.api.activeTodos(), true)
     let todos = raw.map(todo => ({
       id: todo.id,
       title: todo.title,
       notes: todo.notes,
-      notBefore: new Date(todo.not_before),
-      due: (todo.due === null) ? null : new Date(todo.due),
+      notBefore: parseDate(todo.not_before),
+      due: (todo.due === null) ? null : parseDate(todo.due),
     }))
 
     let day = today()
@@ -139,7 +193,6 @@ class Todos {
     }
 
     this.render()
-    this.unblock()
   }
 
   renderList(root, list) {
@@ -152,7 +205,8 @@ class Todos {
 
     let getNode = () => {
       if (nodesReused === nodesToReuse.length) {
-        let node = document.createElement('li')
+        let template = document.getElementById('t-todo-template')
+        let node = template.content.firstElementChild.cloneNode(true)
         ol.appendChild(node)
         return node
       } else {
@@ -161,19 +215,27 @@ class Todos {
     }
 
     // do the thing
-    let selectedId = this.selected !== null
-      ? this.todos[this.selected[0]][this.selected[1]].id
-      : null
-    let date = today()
+    let selectedId = this.selectedId()
+    let date = today().getTime()
     for (let todo of list) {
       let node = getNode()
-      node.innerText = todo.title
+
+      node.querySelector('.title').innerText = todo.title
+      node.querySelector('.notes').innerText = todo.notes
+      node.querySelector('.dates').innerText = (
+        (todo.due === null)
+        ? `nb ${printDate(todo.notBefore, true)}`
+        : `nb ${printDate(todo.notBefore, true)}, due ${printDate(todo.due, true)}`
+      )
+
       node.classList.toggle('active', todo.id === selectedId)
-      node.classList.toggle('overdue', (todo.due !== null) && (todo.due < date))
-      node.classList.toggle('due-today', (todo.due !== null) && (todo.due == date))
+      node.classList.toggle('delete-pending', (todo.id === selectedId) && this.deletePending)
+      let due = todo.due?.getTime()
+      node.classList.toggle('overdue', (due !== null) && (due < date))
+      node.classList.toggle('due-today', (due !== null) && (due === date))
       node.classList.toggle(
         'due-tomorrow',
-        (todo.due !== null) && (todo.due - date > 0) && (todo.due - date <= daysToMs(1))
+        (due !== null) && (0 < due - date) && (due - date <= daysToMs(1))
       )
     }
 
@@ -192,7 +254,7 @@ class Todos {
   }
 }
 
-export async function todos(api, root) {
+export async function todos(api, root, editorRoot) {
   root.style.display = 'block'
 
   let todos = new Todos(api, root)
@@ -201,32 +263,73 @@ export async function todos(api, root) {
       return
     }
 
+    if (todos.deletePending && (e.code !== 'KeyD')) {
+      todos.deletePending = false
+      todos.render()
+    }
+
+    // first, keys that make sense regardless of whether there is a
+    // selection
     switch (e.code) {
-      case "KeyJ":
-      case "ArrowDown":
+      case 'KeyJ':
+      case 'ArrowDown':
         if (e.shiftKey) {
           todos.selectLast()
         } else {
           todos.selectNext()
         }
       break
-      case "KeyK":
-      case "ArrowUp":
+      case 'KeyK':
+      case 'ArrowUp':
         if (e.shiftKey) {
           todos.selectFirst()
         } else {
           todos.selectPrev()
         }
       break
-      case "Escape":
+      case 'Escape':
         todos.clearSelection()
       break
-      case "KeyR":
+      case 'KeyR':
         todos.reload()
       break
+      case 'KeyN':
+        // otherwise this types 'n' into the form
+        event.preventDefault()
+        todos.newTodo(editorRoot)
       break
-      // default:
-      // console.log('key', e.code)
+    }
+
+    // now, just the keys that require a selection
+    if (todos.selected === null) {
+      return
+    }
+
+    switch (e.code) {
+      case 'KeyD':
+        if (todos.deletePending) {
+          todos.deletePending = false
+          todos.deleteSelected()
+        } else {
+          todos.deletePending = true
+          todos.render()
+        }
+      break
+      case 'KeyE':
+      case 'Enter':
+        event.preventDefault()
+        todos.editSelected(editorRoot)
+      break
+      case 'KeyP':
+        if (event.shiftKey) {
+          // postpone by editing
+          event.preventDefault()
+          todos.editSelected(editorRoot, EditorFields.NotBefore)
+        } else {
+          // just postpone to tomorrow
+          todos.quickPostponeSelected()
+        }
+      break;
     }
   })
 }

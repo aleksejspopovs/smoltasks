@@ -83,8 +83,12 @@ export function parseDate(dateString) {
   return new Date(y, m - 1, d)
 }
 
-export function printDate(date) {
-  // returns 'YYYY-MM-DD'
+export function printDate(date, short=false) {
+  // returns 'YYYY-MM-DD'. if short is true, returns MM-DD for dates
+  // within the next 335 days.
+  if (short && (date - (new Date()) <= daysToMs(335))) {
+    return date.toISOString().slice(5, 10)
+  }
   return date.toISOString().slice(0, 10)
 }
 

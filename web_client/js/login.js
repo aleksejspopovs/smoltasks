@@ -21,6 +21,7 @@ export function login(root) {
         return
       }
 
+      // TODO: remove the event listeners so that this component can be reused
       hide()
       resolve(token)
     }

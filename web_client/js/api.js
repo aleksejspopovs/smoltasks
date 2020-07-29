@@ -91,6 +91,20 @@ export class ApiClient {
   async activeTodos() {
     return await this._fetch('todos', undefined, 'GET', true)
   }
+
+  async markDone(id) {
+    let result = await this._fetch(`todos/${id}/done`, true, 'POST', true)
+    console.assert(result === true, 'POST todos/xx/done returns true')
+  }
+
+  async createTodo(todo) {
+    return await this._fetch('todos', todo, 'PUT', true)
+  }
+
+  async editTodo(id, todo) {
+    let result = await this._fetch(`todos/${id}`, todo, 'PUT', true)
+    console.assert(result === true, 'PUT todos/xx returns true')
+  }
 }
 
 export async function checkToken(token) {
