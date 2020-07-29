@@ -28,6 +28,7 @@ class Todos {
     this.deletePending = false
     this.todos = [[], [], []]
     this.blocked = false
+    this.lastUpdated = 0
     this.reload()
   }
 
@@ -164,9 +165,20 @@ class Todos {
     }).then(_ => this.reload())
   }
 
-  async reload() {
+  maybeReload() {
+    if (this.blocked) {
+      return
+    }
+    // 5 minutes
+    if ((new Date()).getTime() - this.lastUpdated < 5 * 60 * 1000) {
+      return
+    }
+    this.reload(true)
+  }
+
+  async reload(quiet=false) {
     // TODO: error handling
-    let raw = await this.blockFor(() => this.api.activeTodos(), true)
+    let raw = await this.blockFor(() => this.api.activeTodos(), !quiet)
     let todos = raw.map(todo => ({
       id: todo.id,
       title: todo.title,
@@ -192,6 +204,7 @@ class Todos {
       this.setSelection(this.findPrev(this.selected))
     }
 
+    this.lastUpdated = (new Date()).getTime()
     this.render()
   }
 
@@ -258,6 +271,7 @@ export async function todos(api, root, editorRoot) {
   root.style.display = 'block'
 
   let todos = new Todos(api, root)
+  setInterval(() => todos.maybeReload(), 10 * 60 * 1000)
   document.addEventListener('keydown', e => {
     if (todos.blocked) {
       return
