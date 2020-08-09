@@ -1,4 +1,5 @@
 export const DaysOfTheWeek = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa']
+export const Months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 const _DaysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
 // see parseShorthand below
@@ -54,6 +55,16 @@ const ShorthandPatterns = [
     }
     return new Date(year, month - 1, date)
   }],
+  /* h */
+  [new RegExp(`^(${Months.join('|')}) ${RegExpDay}$`), false, (from, monthName, day) => {
+    day = parseInt(day, 10)
+    let month = Months.indexOf(monthName)
+    let result = new Date(from.getFullYear(), month, day)
+    if (result <= from) {
+      result = new Date(from.getFullYear() + 1, month, day)
+    }
+    return result
+  }]
 ]
 
 function daysInMonth(year, month) {
@@ -117,11 +128,12 @@ export function parseShorthand(input, from=null) {
     f   1/1, 1/2, ..., 12/31
         also 1-1, 1-2,             → closest such day of the year
     g.  2020-09-01                 → this day
+    h.  jan 1, jan 2, ..., dec 31  → same as f
 
     zero-padding days and months in efg is optional.
 
     abc may return today, but not a date in the past.
-    def always return a date strictly in the future.
+    defh always return a date strictly in the future.
     g is the only method that can return any date.
 
     c will clamp (on Jan 31, "1m" means Feb 28).
@@ -185,6 +197,12 @@ function test_parseShorthand() {
     ['2020-07-24', '2020-07-25', '2020-07-25'],
     ['2020-07-24', '2020-02-29', '2020-02-29'],
     ['2020-07-24', '2021-02-29', null],
+    /* h */
+    ['2020-07-24', 'jul 26', '2020-07-26'],
+    ['2020-07-24', 'jul 2', '2021-07-02'],
+    ['2020-07-24', 'jul 02', '2021-07-02'],
+    ['2020-07-24', 'mar 9', '2021-03-09'],
+    ['2020-07-24', 'dec 22', '2020-12-22'],
   ]
 
   for (let [from, input, expected] of tests) {
@@ -193,7 +211,7 @@ function test_parseShorthand() {
     let result = parseShorthand(input, from_parsed)
     console.assert(
       result?.getTime() === expected_parsed?.getTime(),
-      `parsing ${input} on ${from}: expected ${expected}, got ${printDate(result)}`
+      `parsing ${input} on ${from}: expected ${expected}, got ${result}`
     )
   }
 }
