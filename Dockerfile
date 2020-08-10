@@ -19,7 +19,7 @@ COPY Cargo.toml Cargo.lock ./
 RUN cargo build --release
 
 # copy over db schema and build
-COPY migrations/00-initialize/up.sql /docker-entrypoint-initdb.d/00-up.sql
+COPY migrations/00-initialize/up.sql schema.sql
 COPY docker-build-with-postgres.sh .
 COPY src ./src
 RUN ./docker-build-with-postgres.sh

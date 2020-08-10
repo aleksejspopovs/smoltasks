@@ -21,6 +21,8 @@ while ! pg_isready -U $POSTGRES_USER ; do
 	sleep 2
 done
 
+psql -U $POSTGRES_USER -d $POSTGRES_USER -f schema.sql
+
 # build smoltasks with access to postgres
 export DATABASE_URL="postgresql://$POSTGRES_USER@localhost/$POSTGRES_USER"
 cargo install --locked --path .
